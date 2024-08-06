@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 
 const ON_GOING = new Set<string>();
@@ -34,11 +36,13 @@ class Response<T>
 
 /** @see https://developer.mozilla.org/en-US/docs/Glossary/Base64#the_unicode_problem */
 const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fromCodePoint(...new TextEncoder().encode(
-	"(" +
-	// start
+	"("
+	+
 	function ()
 	{
-		const ports: MessagePort[] = []; const store = new Map<string, { since: number; value: unknown; } | "init">();
+		"use strict";
+
+		const ports: MessagePort[] = []; const store = new Map<string, "init" | { since: number; value: unknown; }>();
 
 		// @ts-ignore
 		self.addEventListener("connect", (event: MessageEvent) =>
@@ -100,13 +104,13 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					}
 				}
 			});
-			// "LINK STARTO..!"
+			// "LINK STATO..!"
 			ports.push(port); port.start();
 		});
 	}
 	.toString()
-	// close
-	+ ")()",
+	+
+	")()"
 ))));
 // ..!
 WORKER.port.start();
