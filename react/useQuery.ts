@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const ON_GOING = new Set<string>();
 
@@ -115,9 +115,9 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 // ..!
 WORKER.port.start();
 
-export default function useQuery<T>(key: string, fetcher: () => Promise<T>, options: { retry?: number; expire?: number; refresh_on_focus?: boolean; refresh_on_interval?: number; refresh_on_reconnect?: boolean; } = {})
+export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?: number; expire?: number; refresh_on_focus?: boolean; refresh_on_interval?: number; refresh_on_reconnect?: boolean; } = {})
 {
-	const [data, set_data] = useState<T>();
+	const key = useRef<string>(); const [data, set_data] = useState<T>();
 
 	/** @see https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker */
 	useEffect(() =>
@@ -128,7 +128,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 			//
 			// STEP 2. match key & value
 			//
-			if (response.path === key)
+			if (response.path === key.current)
 			{
 				switch (response.type)
 				{
@@ -137,16 +137,16 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 						//
 						// STEP 3. dedupe
 						//
-						if (!ON_GOING.has(key))
+						if (!ON_GOING.has(key.current))
 						{
 							//
 							// STEP 4. prevent duplication
 							//
-							ON_GOING.add(key);
+							ON_GOING.add(key.current);
 							//
 							// STEP 5. allocate cache
 							//
-							WORKER.port.postMessage(new Request(RequestType.ALLOCATE, key));
+							WORKER.port.postMessage(new Request(RequestType.ALLOCATE, key.current));
 							//
 							// STEP 6. fetch data
 							//
@@ -159,11 +159,11 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 								//
 								// STEP 8. allow duplication
 								//
-								ON_GOING.delete(key);
+								ON_GOING.delete(key.current as string);
 								//
 								// STEP 9. update cache
 								//
-								WORKER.port.postMessage(new Request(RequestType.ASSIGN, key, data));
+								WORKER.port.postMessage(new Request(RequestType.ASSIGN, key.current as string, data));
 							});
 						}
 						break;
@@ -196,12 +196,12 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 	{
 		function handle(event: Event)
 		{
-			if (!document.hidden)
+			//
+			// STEP 1. synchronize
+			//
+			if (key.current && !document.hidden)
 			{
-				//
-				// STEP 1. synchronize
-				//
-				WORKER.port.postMessage(new Request(RequestType.SYNC, key));
+				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
 			}
 		}
 		document.addEventListener("visibilitychange", handle);
@@ -217,7 +217,10 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 			//
 			// STEP 1. synchronize
 			//
-			WORKER.port.postMessage(new Request(RequestType.SYNC, key));
+			if (key.current && navigator.onLine)
+			{
+				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
+			}
 		}
 		window.addEventListener("online", handle);
 		return () => window.removeEventListener("online", handle);
@@ -226,15 +229,24 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 
 	useEffect(() =>
 	{
-		//
-		// STEP 1. synchronize
-		//
-		if (navigator.onLine)
+		hash(fetcher.toString()).then((sha256) =>
 		{
-			WORKER.port.postMessage(new Request(RequestType.SYNC, key));
-		}
+			key.current = sha256;
+			//
+			// STEP 1. synchronize
+			//
+			if (navigator.onLine)
+			{
+				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
+			}
+		});
 	},
-	[]);
+	[fetcher]);
 
 	return { data };
+}
+
+async function hash(value: string)
+{
+	return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
