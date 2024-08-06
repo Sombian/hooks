@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
-const CONCURRENT = new Set<string>();
+const ON_GOING = new Set<string>();
 
 const enum RequestType
 {
-	SYNC = "sync",
-	ASSIGN = "assign",
-	ALLOCATE = "allocate",
+	SYNC,
+	ASSIGN,
+	ALLOCATE,
 }
 
 interface Request<T>
@@ -18,9 +18,9 @@ interface Request<T>
 
 const enum ResponseType
 {
-	EMPTY = "empty",
-	LOADING = "loading",
-	SUCCESS = "success",
+	EMPTY,
+	LOADING,
+	SUCCESS,
 }
 
 interface Response<T>
@@ -47,7 +47,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 
 			port.addEventListener("message", (event) =>
 			{
-				const request = event.data as Request<unknown>;
+				const request: Request<unknown> = event.data;
 
 				switch (request.type)
 				{
@@ -55,7 +55,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					{
 						if (!storage.has(request.path))
 						{
-							port.postMessage({ type: ResponseType.EMPTY, path: request.path, data: null } as Response<unknown>);
+							port.postMessage({ type: ResponseType.EMPTY, path: request.path, data: null } satisfies Response<typeof request["data"]>);
 						}
 						else
 						{
@@ -63,11 +63,11 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 
 							if (cache === "init")
 							{
-								port.postMessage({ type: ResponseType.LOADING, path: request.path, data: null } as Response<unknown>);
+								port.postMessage({ type: ResponseType.LOADING, path: request.path, data: null } satisfies Response<typeof request["data"]>);
 							}
 							else
 							{
-								port.postMessage({ type: ResponseType.SUCCESS, path: request.path, data: cache.value } as Response<unknown>);
+								port.postMessage({ type: ResponseType.SUCCESS, path: request.path, data: cache.value } satisfies Response<typeof request["data"]>);
 							}
 						}
 						break;
@@ -78,7 +78,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 
 						for (const port of ports)
 						{
-							port.postMessage({ type: ResponseType.SUCCESS, path: request.path, data: request.data } as Response<unknown>);
+							port.postMessage({ type: ResponseType.SUCCESS, path: request.path, data: request.data } satisfies Response<typeof request["data"]>);
 						}
 						break;
 					}
@@ -88,7 +88,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 
 						for (const port of ports)
 						{
-							port.postMessage({ type: ResponseType.LOADING, path: request.path, data: request.data } as Response<unknown>);
+							port.postMessage({ type: ResponseType.LOADING, path: request.path, data: request.data } satisfies Response<typeof request["data"]>);
 						}
 						break;
 					}
@@ -105,7 +105,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 // ..!
 WORKER.port.start();
 
-export default function useQuery<T>(key: string, fetcher: () => Promise<T>, options: { retry?: number; lifespan?: number; refresh_on_focus?: boolean; refresh_on_interval?: number; refresh_on_reconnect?: boolean; } = {})
+export default function useQuery<T>(key: string, fetcher: () => Promise<T>, options: { retry?: number; expire?: number; refresh_on_focus?: boolean; refresh_on_interval?: number; refresh_on_reconnect?: boolean; } = {})
 {
 	const [data, set_data] = useState<T>();
 
@@ -114,7 +114,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 	{
 		function handle(event: MessageEvent)
 		{
-			const response = event.data as Response<T>;
+			const response: Response<T> = event.data;
 			//
 			// STEP 2. match key & value
 			//
@@ -127,16 +127,16 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 						//
 						// STEP 3. dedupe
 						//
-						if (!CONCURRENT.has(key))
+						if (!ON_GOING.has(key))
 						{
 							//
 							// STEP 4. prevent duplication
 							//
-							CONCURRENT.add(key);
+							ON_GOING.add(key);
 							//
 							// STEP 5. allocate cache
 							//
-							WORKER.port.postMessage({ type: RequestType.ALLOCATE, path: key } as Request<T>);
+							WORKER.port.postMessage({ type: RequestType.ALLOCATE, path: key } satisfies Request<T>);
 							//
 							// STEP 6. fetch data
 							//
@@ -149,11 +149,11 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 								//
 								// STEP 8. allow duplication
 								//
-								CONCURRENT.delete(key);
+								ON_GOING.delete(key);
 								//
 								// STEP 9. update cache
 								//
-								WORKER.port.postMessage({ type: RequestType.ASSIGN, path: key, data: data } as Request<T>);
+								WORKER.port.postMessage({ type: RequestType.ASSIGN, path: key, data: data } satisfies Request<T>);
 							});
 						}
 						break;
@@ -191,7 +191,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 				//
 				// STEP 1. synchronize
 				//
-				WORKER.port.postMessage({ type: RequestType.SYNC, path: key } as Request<T>);
+				WORKER.port.postMessage({ type: RequestType.SYNC, path: key } satisfies Request<T>);
 			}
 		}
 		document.addEventListener("visibilitychange", handle);
@@ -207,7 +207,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 			//
 			// STEP 1. synchronize
 			//
-			WORKER.port.postMessage({ type: RequestType.SYNC, path: key } as Request<T>);
+			WORKER.port.postMessage({ type: RequestType.SYNC, path: key } satisfies Request<T>);
 		}
 		window.addEventListener("online", handle);
 		return () => window.removeEventListener("online", handle);
@@ -221,10 +221,10 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 		//
 		if (navigator.onLine)
 		{
-			WORKER.port.postMessage({ type: RequestType.SYNC, path: key, data: null } as Request<T>);
+			WORKER.port.postMessage({ type: RequestType.SYNC, path: key } satisfies Request<T>);
 		}
 	},
 	[]);
 
-	return { data } as { data: T; };
+	return { data };
 }
