@@ -126,7 +126,7 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 		{
 			const response: Response<T> = event.data;
 			//
-			// STEP 2. match key & value
+			// STEP 3. match key & value
 			//
 			if (response.path === key.current)
 			{
@@ -135,33 +135,33 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 					case ResponseType.EMPTY:
 					{
 						//
-						// STEP 3. dedupe
+						// STEP 4. dedupe
 						//
 						if (!ON_GOING.has(key.current))
 						{
 							//
-							// STEP 4. prevent duplication
+							// STEP 5. prevent duplication
 							//
 							ON_GOING.add(key.current);
 							//
-							// STEP 5. allocate cache
+							// STEP 6. allocate cache
 							//
 							WORKER.port.postMessage(new Request(RequestType.ALLOCATE, key.current));
 							//
-							// STEP 6. fetch data
+							// STEP 7. fetch data
 							//
 							fetcher().then((data) =>
 							{
 								//
-								// STEP 7. reflect fetcher
+								// STEP 8. reflect fetcher
 								//
 								set_data(data);
 								//
-								// STEP 8. allow duplication
+								// STEP 9. allow duplication
 								//
 								ON_GOING.delete(key.current as string);
 								//
-								// STEP 9. update cache
+								// STEP 10. update cache
 								//
 								WORKER.port.postMessage(new Request(RequestType.ASSIGN, key.current as string, data));
 							});
@@ -171,12 +171,12 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 					case ResponseType.SUCCESS:
 					{
 						//
-						// STEP 3. compare data
+						// STEP 4. compare data
 						//
 						if (response.data !== data)
 						{
 							//
-							// STEP 4. reflect response
+							// STEP 5. reflect response
 							//
 							set_data(response.data);
 						}
@@ -189,7 +189,7 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 		WORKER.port.addEventListener("message", handle);
 		return () => WORKER.port.removeEventListener("message", handle);
 	},
-	[key, data, fetcher]);
+	[data, fetcher]);
 
 	/** @see https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API */
 	useEffect(() =>
@@ -197,7 +197,7 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 		function handle(event: Event)
 		{
 			//
-			// STEP 1. synchronize
+			// STEP 2. synchronize
 			//
 			if (key.current && !document.hidden)
 			{
@@ -215,7 +215,7 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 		function handle(event: Event)
 		{
 			//
-			// STEP 1. synchronize
+			// STEP 2. synchronize
 			//
 			if (key.current && navigator.onLine)
 			{
@@ -229,11 +229,14 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 
 	useEffect(() =>
 	{
-		hash(fetcher.toString()).then((sha256) =>
+		hash(fetcher.toString(), "SHA-256").then((sha256) =>
 		{
+			//
+			// STEP 1. hash
+			//
 			key.current = sha256;
 			//
-			// STEP 1. synchronize
+			// STEP 2. synchronize
 			//
 			if (navigator.onLine)
 			{
@@ -246,7 +249,7 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 	return { data };
 }
 
-async function hash(value: string)
+async function hash(value: string, algorithm: AlgorithmIdentifier)
 {
-	return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+	return Array.from(new Uint8Array(await crypto.subtle.digest(algorithm, new TextEncoder().encode(value)))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
