@@ -116,5 +116,5 @@ export default function useCrossState<T>(key: string, fallback: T, options: { ex
 	},
 	[key, data]);
 
-	return [data, setter] as [T, typeof setter];
+	return [data, setter];
 }

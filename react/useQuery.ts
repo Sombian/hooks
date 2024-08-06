@@ -36,7 +36,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 	// start
 	function ()
 	{
-		const ports: MessagePort[] = []; const storage = new Map<string, { since: number; value: unknown; } | "init">();
+		const ports: MessagePort[] = []; const store = new Map<string, { since: number; value: unknown; } | "init">();
 
 		// @ts-ignore
 		self.addEventListener("connect", (event: MessageEvent) =>
@@ -53,13 +53,13 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 				{
 					case RequestType.SYNC:
 					{
-						if (!storage.has(request.path))
+						if (!store.has(request.path))
 						{
 							port.postMessage({ type: ResponseType.EMPTY, path: request.path, data: null } satisfies Response<typeof request["data"]>);
 						}
 						else
 						{
-							const cache = storage.get(request.path)!;
+							const cache = store.get(request.path)!;
 
 							if (cache === "init")
 							{
@@ -74,7 +74,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					}
 					case RequestType.ASSIGN:
 					{
-						storage.set(request.path, { since: Date.now(), value: request.data });
+						store.set(request.path, { since: Date.now(), value: request.data });
 
 						for (const port of ports)
 						{
@@ -84,7 +84,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					}
 					case RequestType.ALLOCATE:
 					{
-						storage.set(request.path, "init");
+						store.set(request.path, "init");
 
 						for (const port of ports)
 						{
