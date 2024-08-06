@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
-const [CACHE, TARGET, CHANNEL] = [new Map<string, unknown>(), new EventTarget(), new BroadcastChannel("useCrossState")];
+const [CACHE, TARGET, CHANNEL] = [new Map<string, unknown>(), new EventTarget(), new BroadcastChannel("useSyncState")];
 
-const enum Protocol
+const enum MessageType
 {
 	SYNC,
 	UPDATE,
@@ -10,17 +10,17 @@ const enum Protocol
 
 class Message<T>
 {
-	constructor(public readonly type: Protocol, public readonly key: string, public readonly value: T)
+	constructor(public readonly type: MessageType, public readonly key: string, public readonly value: T)
 	{
 		// TODO: none
 	}
 }
 
-export default function useCrossState<T>(key: string, fallback: T, options: { expire?: number; refresh_on_focus?: boolean; refresh_on_interval?: number; } = {})
+export default function useSyncState<T>(key: string, fallback: T)
 {
 	const [data, set_data] = useState<T>(CACHE.has(key) ? CACHE.get(key) as T : fallback);
 
-	const protocol = useCallback((msg: Message<T>) =>
+	const communicate = useCallback((msg: Message<T>) =>
 	{
 		//
 		// STEP 2. match key & value
@@ -29,15 +29,15 @@ export default function useCrossState<T>(key: string, fallback: T, options: { ex
 		{
 			switch (msg.type)
 			{
-				case Protocol.SYNC:
+				case MessageType.SYNC:
 				{
 					//
 					// STEP 3. send back data
 					//
-					CHANNEL.postMessage(new Message(Protocol.UPDATE, key, data));
+					CHANNEL.postMessage(new Message(MessageType.UPDATE, key, data));
 					break;
 				}
-				case Protocol.UPDATE:
+				case MessageType.UPDATE:
 				{
 					//
 					// STEP 3. reflect msg
@@ -54,25 +54,25 @@ export default function useCrossState<T>(key: string, fallback: T, options: { ex
 	{
 		function handle(event: CustomEvent)
 		{
-			protocol(event.detail as Message<T>);
+			communicate(event.detail as Message<T>);
 		}
 		// @ts-ignore
-		TARGET.addEventListener("msg", handle);
+		TARGET.addEventListener(":3", handle);
 		// @ts-ignore
-		return () => TARGET.removeEventListener("msg", handle);
+		return () => TARGET.removeEventListener(":3", handle);
 	},
-	[protocol]);
+	[communicate]);
 
 	useEffect(() =>
 	{
 		function handle(event: MessageEvent)
 		{
-			protocol(event.data as Message<T>);
+			communicate(event.data as Message<T>);
 		}
 		CHANNEL.addEventListener("message", handle);
 		return () => CHANNEL.removeEventListener("message", handle);
 	},
-	[protocol]);
+	[communicate]);
 
 	/** @see https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API */
 	useEffect(() =>
@@ -84,7 +84,7 @@ export default function useCrossState<T>(key: string, fallback: T, options: { ex
 				//
 				// STEP 1. synchronize
 				//
-				CHANNEL.postMessage(new Message<T>(Protocol.SYNC, key, data));
+				CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
 			}
 		}
 		document.addEventListener("visibilitychange", handle);
@@ -97,7 +97,7 @@ export default function useCrossState<T>(key: string, fallback: T, options: { ex
 		//
 		// STEP 1. synchronize
 		//
-		CHANNEL.postMessage(new Message<T>(Protocol.SYNC, key, data));
+		CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
 	},
 	[]);
 
@@ -107,11 +107,11 @@ export default function useCrossState<T>(key: string, fallback: T, options: { ex
 
 		if (signal !== data)
 		{
-			const msg = new Message(Protocol.UPDATE, key, signal);
+			const msg = new Message(MessageType.UPDATE, key, signal);
 			//
 			// STEP 3. (waterfall) component -> page -> channel
 			//
-			set_data(signal); TARGET.dispatchEvent(CACHE.set(key, signal) && new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
+			set_data(signal); TARGET.dispatchEvent(CACHE.set(key, signal) && new CustomEvent(":3", { detail: msg })); CHANNEL.postMessage(msg);
 		}
 	},
 	[key, data]);

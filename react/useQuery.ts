@@ -9,11 +9,12 @@ const enum RequestType
 	ALLOCATE,
 }
 
-interface Request<T>
+class Request<T>
 {
-	readonly type: RequestType;
-	readonly path: string;
-	readonly data?: T;
+	constructor(readonly type: RequestType, readonly path: string, readonly data?: T)
+	{
+		// TODO: none
+	}
 }
 
 const enum ResponseType
@@ -23,11 +24,12 @@ const enum ResponseType
 	SUCCESS,
 }
 
-interface Response<T>
+class Response<T>
 {
-	readonly type: ResponseType;
-	readonly path: string;
-	readonly data: T;
+	constructor(readonly type: ResponseType, readonly path: string, readonly data: T)
+	{
+		// TODO: none
+	}
 }
 
 /** @see https://developer.mozilla.org/en-US/docs/Glossary/Base64#the_unicode_problem */
@@ -43,8 +45,6 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 		{
 			const port = event.ports[0];
 
-			ports.push(port);
-
 			port.addEventListener("message", (event) =>
 			{
 				const request: Request<unknown> = event.data;
@@ -55,7 +55,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					{
 						if (!store.has(request.path))
 						{
-							port.postMessage({ type: ResponseType.EMPTY, path: request.path, data: null } satisfies Response<typeof request["data"]>);
+							port.postMessage(new Response(ResponseType.EMPTY, request.path, null));
 						}
 						else
 						{
@@ -63,11 +63,11 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 
 							if (cache === "init")
 							{
-								port.postMessage({ type: ResponseType.LOADING, path: request.path, data: null } satisfies Response<typeof request["data"]>);
+								port.postMessage(new Response(ResponseType.LOADING, request.path, null));
 							}
 							else
 							{
-								port.postMessage({ type: ResponseType.SUCCESS, path: request.path, data: cache.value } satisfies Response<typeof request["data"]>);
+								port.postMessage(new Response(ResponseType.SUCCESS, request.path, cache.value));
 							}
 						}
 						break;
@@ -76,9 +76,12 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					{
 						store.set(request.path, { since: Date.now(), value: request.data });
 
-						for (const port of ports)
+						for (const tab of ports)
 						{
-							port.postMessage({ type: ResponseType.SUCCESS, path: request.path, data: request.data } satisfies Response<typeof request["data"]>);
+							if (port !== tab)
+							{
+								tab.postMessage(new Response(ResponseType.SUCCESS, request.path, request.data));
+							}
 						}
 						break;
 					}
@@ -86,16 +89,19 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					{
 						store.set(request.path, "init");
 
-						for (const port of ports)
+						for (const tab of ports)
 						{
-							port.postMessage({ type: ResponseType.LOADING, path: request.path, data: request.data } satisfies Response<typeof request["data"]>);
+							if (port !== tab)
+							{
+								tab.postMessage(new Response(ResponseType.LOADING, request.path, null));
+							}
 						}
 						break;
 					}
 				}
 			});
-			// ..!
-			port.start();
+			// "LINK STARTO..!"
+			ports.push(port); port.start();
 		});
 	}
 	.toString()
@@ -136,7 +142,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 							//
 							// STEP 5. allocate cache
 							//
-							WORKER.port.postMessage({ type: RequestType.ALLOCATE, path: key } satisfies Request<T>);
+							WORKER.port.postMessage(new Request(RequestType.ALLOCATE, key));
 							//
 							// STEP 6. fetch data
 							//
@@ -153,7 +159,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 								//
 								// STEP 9. update cache
 								//
-								WORKER.port.postMessage({ type: RequestType.ASSIGN, path: key, data: data } satisfies Request<T>);
+								WORKER.port.postMessage(new Request(RequestType.ASSIGN, key, data));
 							});
 						}
 						break;
@@ -191,7 +197,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 				//
 				// STEP 1. synchronize
 				//
-				WORKER.port.postMessage({ type: RequestType.SYNC, path: key } satisfies Request<T>);
+				WORKER.port.postMessage(new Request(RequestType.SYNC, key));
 			}
 		}
 		document.addEventListener("visibilitychange", handle);
@@ -207,7 +213,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 			//
 			// STEP 1. synchronize
 			//
-			WORKER.port.postMessage({ type: RequestType.SYNC, path: key } satisfies Request<T>);
+			WORKER.port.postMessage(new Request(RequestType.SYNC, key));
 		}
 		window.addEventListener("online", handle);
 		return () => window.removeEventListener("online", handle);
@@ -221,7 +227,7 @@ export default function useQuery<T>(key: string, fetcher: () => Promise<T>, opti
 		//
 		if (navigator.onLine)
 		{
-			WORKER.port.postMessage({ type: RequestType.SYNC, path: key } satisfies Request<T>);
+			WORKER.port.postMessage(new Request(RequestType.SYNC, key));
 		}
 	},
 	[]);
