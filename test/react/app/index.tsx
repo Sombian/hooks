@@ -10,23 +10,33 @@ function App()
 
 	return (
 		<main>
+			<table border={1}>
+				<thead>
+					<th>foo</th>
+					<th>bar</th>
+				</thead>
+				<tbody>
+					<tr>
+						<td>{foo}</td>
+						<td>{bar}</td>
+					</tr>
+				</tbody>
+			</table>
 			<div>
-				foo={foo}
+				<button onClick={() => setFoo((_) => _ + 1)}>
+					foo::increase
+				</button>
+				<button onClick={() => setFoo((_) => _ - 1)}>
+					foo::decrease
+				</button>
 			</div>
 			<div>
-				bar={bar}
-			</div>
-			<div onClick={() => setFoo((_) => _ + 1)}>
-				foo::increase
-			</div>
-			<div onClick={() => setFoo((_) => _ - 1)}>
-				foo::decrease
-			</div>
-			<div onClick={() => setBar((_) => _ + 1)}>
-				bar::increase
-			</div>
-			<div onClick={() => setBar((_) => _ - 1)}>
-				bar::decrease
+				<button onClick={() => setBar((_) => _ + 1)}>
+					bar::increase
+				</button>
+				<button onClick={() => setBar((_) => _ - 1)}>
+					bar::decrease
+				</button>
 			</div>
 		</main>
 	);
