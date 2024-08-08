@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+
+<html>
+	<head>
+		<title>SolidJS</title>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script src="./index.js"></script>
+	</body>
+	<script>
+		new WebSocket("ws://localhost:3000").addEventListener("message", (event) => location.reload());
+	</script>
+</html>

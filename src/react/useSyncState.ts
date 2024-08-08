@@ -20,14 +20,14 @@ class Message<T>
 
 export default function useSyncState<T>(key: string, fallback: T)
 {
-	const [data, set_data] = useState<T>(CACHE.has(key) ? CACHE.get(key) as T : fallback);
+	const [data, setData] = useState<T>(CACHE.has(key) ? CACHE.get(key) as T : undefined);
 
 	const communicate = useCallback((msg: Message<T>) =>
 	{
 		//
 		// STEP 2. match key & value
 		//
-		if (msg.key === key && msg.value !== data)
+		if (key === msg.key && data !== msg.value)
 		{
 			switch (msg.type)
 			{
@@ -44,7 +44,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 					//
 					// STEP 3. reflect msg
 					//
-					set_data(msg.value);
+					setData(msg.value);
 					break;
 				}
 			}
@@ -56,12 +56,15 @@ export default function useSyncState<T>(key: string, fallback: T)
 	{
 		function handle(event: CustomEvent)
 		{
-			communicate(event.detail as Message<T>);
+			if (!document.hidden)
+			{
+				communicate(event.detail as Message<T>);
+			}
 		}
 		// @ts-ignore
-		TARGET.addEventListener(":3", handle);
+		TARGET.addEventListener("msg", handle);
 		// @ts-ignore
-		return () => TARGET.removeEventListener(":3", handle);
+		return () => TARGET.removeEventListener("msg", handle);
 	},
 	[communicate]);
 
@@ -69,7 +72,10 @@ export default function useSyncState<T>(key: string, fallback: T)
 	{
 		function handle(event: MessageEvent)
 		{
-			communicate(event.data as Message<T>);
+			if (!document.hidden)
+			{
+				communicate(event.data as Message<T>);
+			}
 		}
 		CHANNEL.addEventListener("message", handle);
 		return () => CHANNEL.removeEventListener("message", handle);
@@ -105,18 +111,18 @@ export default function useSyncState<T>(key: string, fallback: T)
 
 	const setter = useCallback((_: T | ((_: T) => T)) =>
 	{
-		const signal = _ instanceof Function ? _(data) : _;
+		const signal = _ instanceof Function ? _(data ?? fallback) : _;
 
 		if (signal !== data)
 		{
 			const msg = new Message(MessageType.UPDATE, key, signal);
 			//
-			// STEP 3. (waterfall) component -> page -> channel
+			// STEP 3. (waterfall) components -> page -> tabs
 			//
-			set_data(signal); TARGET.dispatchEvent(CACHE.set(key, signal) && new CustomEvent(":3", { detail: msg })); CHANNEL.postMessage(msg);
+			setData(signal); TARGET.dispatchEvent(CACHE.set(key, signal) && new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
 		}
 	},
-	[key, data]);
+	[key, data, fallback]);
 
-	return [data, setter];
+	return [data ?? fallback, setter] as [T, typeof setter];
 }

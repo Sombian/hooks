@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 const ON_GOING = new Set<string>();
 
@@ -13,7 +13,7 @@ const enum RequestType
 
 class Request<T>
 {
-	constructor(readonly type: RequestType, readonly path: string, readonly data?: T)
+	constructor(readonly type: RequestType, readonly key: string, readonly value?: T)
 	{
 		// TODO: none
 	}
@@ -28,7 +28,7 @@ const enum ResponseType
 
 class Response<T>
 {
-	constructor(readonly type: ResponseType, readonly path: string, readonly data: T)
+	constructor(readonly type: ResponseType, readonly key: string, readonly value: T)
 	{
 		// TODO: none
 	}
@@ -38,6 +38,7 @@ class Response<T>
 const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fromCodePoint(...new TextEncoder().encode(
 	"("
 	+
+	/** @see https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker */
 	function ()
 	{
 		"use strict";
@@ -57,47 +58,47 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 				{
 					case RequestType.SYNC:
 					{
-						if (!store.has(request.path))
+						if (!store.has(request.key))
 						{
-							port.postMessage(new Response(ResponseType.EMPTY, request.path, null));
+							port.postMessage(new Response(ResponseType.EMPTY, request.key, null));
 						}
 						else
 						{
-							const cache = store.get(request.path)!;
+							const cache = store.get(request.key)!;
 
 							if (cache === "init")
 							{
-								port.postMessage(new Response(ResponseType.LOADING, request.path, null));
+								port.postMessage(new Response(ResponseType.LOADING, request.key, null));
 							}
 							else
 							{
-								port.postMessage(new Response(ResponseType.SUCCESS, request.path, cache.value));
+								port.postMessage(new Response(ResponseType.SUCCESS, request.key, cache.value));
 							}
 						}
 						break;
 					}
 					case RequestType.ASSIGN:
 					{
-						store.set(request.path, { since: Date.now(), value: request.data });
+						store.set(request.key, { since: Date.now(), value: request.value });
 
 						for (const tab of ports)
 						{
 							if (port !== tab)
 							{
-								tab.postMessage(new Response(ResponseType.SUCCESS, request.path, request.data));
+								tab.postMessage(new Response(ResponseType.SUCCESS, request.key, request.value));
 							}
 						}
 						break;
 					}
 					case RequestType.ALLOCATE:
 					{
-						store.set(request.path, "init");
+						store.set(request.key, "init");
 
 						for (const tab of ports)
 						{
 							if (port !== tab)
 							{
-								tab.postMessage(new Response(ResponseType.LOADING, request.path, null));
+								tab.postMessage(new Response(ResponseType.LOADING, request.key, null));
 							}
 						}
 						break;
@@ -115,11 +116,19 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 // ..!
 WORKER.port.start();
 
-export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?: number; expire?: number; refresh_on_focus?: boolean; refresh_on_interval?: number; refresh_on_reconnect?: boolean; } = {})
+export default function useQuery<T, D>(fetcher: () => Promise<T>, options: { retry?: number; expire?: number; suspense?: boolean; refresh_on_focus?: boolean; refresh_on_interval?: number; refresh_on_reconnect?: boolean; extract?: (data: T) => D; onError?: (error: Error) => void; onSuccess?: (data: T) => void; } = {})
 {
-	const key = useRef<string>(); const [data, set_data] = useState<T>();
+	const key = useRef<string>(); const state = useRef<{ data?: D; error?: Error; isLoading: boolean; isFetching: boolean; }>({ isLoading: true, isFetching: true }); const suspenser = useRef(defer()); const dependencies = useRef<Set<string>>(new Set());
 
-	/** @see https://developer.mozilla.org/en-US/docs/Web/API/SharedWorker */
+	const { data, error, isLoading, isFetching } = state.current;
+	//
+	// for <Suspense/> component
+	//
+	if (isLoading && options.suspense)
+	{
+		throw suspenser.current.promise;
+	}
+
 	useEffect(() =>
 	{
 		function handle(event: MessageEvent)
@@ -128,7 +137,7 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 			//
 			// STEP 3. match key & value
 			//
-			if (response.path === key.current)
+			if (key.current === response.key)
 			{
 				switch (response.type)
 				{
@@ -155,7 +164,7 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 								//
 								// STEP 8. reflect fetcher
 								//
-								set_data(data);
+								setData(data);
 								//
 								// STEP 9. allow duplication
 								//
@@ -164,6 +173,10 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 								// STEP 10. update cache
 								//
 								WORKER.port.postMessage(new Request(RequestType.ASSIGN, key.current as string, data));
+							})
+							.catch((error) =>
+							{
+								// TODO: retry
 							});
 						}
 						break;
@@ -173,12 +186,12 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 						//
 						// STEP 4. compare data
 						//
-						if (response.data !== data)
+						if (data !== response.value)
 						{
 							//
 							// STEP 5. reflect response
 							//
-							set_data(response.data);
+							setData(response.value);
 						}
 						break;
 					}
@@ -238,18 +251,51 @@ export default function useQuery<T>(fetcher: () => Promise<T>, options: { retry?
 			//
 			// STEP 2. synchronize
 			//
-			if (navigator.onLine)
-			{
-				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
-			}
+			WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
 		});
 	},
 	[fetcher]);
 
-	return { data };
+	return {
+		get data()
+		{
+			dependencies.current.add("data"); return data;
+		},
+		get error()
+		{
+			dependencies.current.add("error"); return error;
+		},
+		get isLoading()
+		{
+			dependencies.current.add("isLoading"); return isLoading;
+		},
+		get isFetching()
+		{
+			dependencies.current.add("isFetching"); return isFetching;
+		},
+	};
 }
 
+/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/withResolvers */
+function defer()
+{
+	let resolver!: Parameters<ConstructorParameters<typeof Promise>[0]>[0];
+	let rejecter!: Parameters<ConstructorParameters<typeof Promise>[0]>[1];
+
+	const promise = new Promise((resolve, reject) =>
+	{
+		resolver = resolve;
+		rejecter = reject;
+	});
+
+	return { promise, resolve: resolver, reject: rejecter };
+}
+
+/** @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest */
 async function hash(value: string, algorithm: AlgorithmIdentifier)
 {
+	//
+	// converts an ArrayBuffer to a hex string
+	//
 	return Array.from(new Uint8Array(await crypto.subtle.digest(algorithm, new TextEncoder().encode(value)))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
