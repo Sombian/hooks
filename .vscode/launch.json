@@ -1,0 +1,11 @@
+{
+	"configurations":
+	[
+		{
+			"name": "test(react)", "type": "node-terminal", "cwd":"${workspaceFolder}", "request": "launch", "command": "bun test(react)",
+		},
+		{
+			"name": "test(solidjs)", "type": "node-terminal", "cwd":"${workspaceFolder}", "request": "launch", "command": "bun test(solidjs)",
+		},
+	],
+}

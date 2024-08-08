@@ -5,8 +5,8 @@ import useSyncState from "@/react/useSyncState";
 
 function App()
 {
-	const [foo, setFoo] = useSyncState("test", 1.0);
-	const [bar, setBar] = useSyncState("test", 0.5);
+	const [foo, setFoo] = useSyncState("test", 0);
+	const [bar, setBar] = useSyncState("test", 5);
 
 	return (
 		<main>
@@ -17,10 +17,16 @@ function App()
 				bar={bar}
 			</div>
 			<div onClick={() => setFoo((_) => _ + 1)}>
-				increase
+				foo::increase
 			</div>
 			<div onClick={() => setFoo((_) => _ - 1)}>
-				decrease
+				foo::decrease
+			</div>
+			<div onClick={() => setBar((_) => _ + 1)}>
+				bar::increase
+			</div>
+			<div onClick={() => setBar((_) => _ - 1)}>
+				bar::decrease
 			</div>
 		</main>
 	);

@@ -1,8 +1,8 @@
 {
 	"scripts":
 	{
-		"test(react)": "bun build ./test/react --outdir ./test --minify --watch",
-		"test(solidjs)": "bun build ./test/solidjs --outdir ./test --minify --watch"
+		"test(react)": "bun test/react/index.ts --hot",
+		"test(solidjs)": "bun test/solidjs/index.ts --hot"
 	},
 	"dependencies":
 	{

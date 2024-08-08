@@ -50,7 +50,8 @@ Bun.serve(
 		{
 			// TODO: none
 		}
-	}
+	},
+	port: 6969,
 });
 
 build();

@@ -20,7 +20,7 @@ class Message<T>
 
 export default function useSyncState<T>(key: string, fallback: T)
 {
-	const [data, setData] = useState<T>(CACHE.has(key) ? CACHE.get(key) as T : undefined);
+	const [data, setData] = useState(CACHE.has(key) ? CACHE.get(key) as T : fallback);
 
 	const communicate = useCallback((msg: Message<T>) =>
 	{
@@ -102,16 +102,19 @@ export default function useSyncState<T>(key: string, fallback: T)
 
 	useEffect(() =>
 	{
-		//
-		// STEP 1. synchronize
-		//
-		CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
+		if (!document.hidden)
+		{
+			//
+			// STEP 1. synchronize
+			//
+			CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
+		}
 	},
 	[]);
 
 	const setter = useCallback((_: T | ((_: T) => T)) =>
 	{
-		const signal = _ instanceof Function ? _(data ?? fallback) : _;
+		const signal = _ instanceof Function ? _(data) : _;
 
 		if (signal !== data)
 		{
@@ -122,7 +125,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 			setData(signal); TARGET.dispatchEvent(CACHE.set(key, signal) && new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
 		}
 	},
-	[key, data, fallback]);
+	[key, data]);
 
-	return [data ?? fallback, setter] as [T, typeof setter];
+	return [data, setter] as [T, typeof setter];
 }
