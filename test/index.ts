@@ -2,22 +2,38 @@ import fs from "fs";
 import path from "path";
 import util from "util";
 
-import type { Serve } from "bun";
+import type { Serve, ServerWebSocket } from "bun";
 
-const folder = (() =>
-{
-	const { values } = util.parseArgs({ args: Bun.argv, options: { target: { type: "string" } }, allowPositionals: true });
-
-	if (!values.target) throw new Error();
-	
-	return path.join(import.meta.dir, values.target);
-})
-();
+const folder = path.join(import.meta.dir, util.parseArgs({ args: process.argv, options: { target: { type: "string" } }, allowPositionals: true }).values.target!);
 
 function build()
 {
-	return Bun.build({ entrypoints: [path.join(folder, "index.tsx")], outdir: path.join(folder), minify: true });
+	return Bun.build(
+	{
+		entrypoints: [path.join(folder, "index.tsx")],
+		outdir: path.join(folder),
+		minify: true,
+	});
 }
+
+const [watcher, clients] = [fs.watch(path.join(folder, "index.tsx")), new Set<ServerWebSocket>()];
+
+watcher.addListener("change", (event) =>
+{
+	build().then(() =>
+	{
+		for (const client of clients)
+		{
+			client.send(":3");
+		}
+	});
+});
+
+process.on("SIGINT", (event) =>
+{
+	watcher.close();
+	process.exit(0);
+});
 
 build();
 
@@ -48,22 +64,15 @@ export default
 	{
 		open(ws)
 		{
-			const watcher = fs.watch(path.join(folder, "index.tsx"));
-
-			watcher.addListener("change", (event) =>
-			{
-				build().then(() => ws.send(":3"));
-			});
-
-			process.on("SIGINT", (event) =>
-			{
-				watcher.close();
-				process.exit(0);
-			});
+			clients.add(ws);
+		},
+		close(ws)
+		{
+			clients.delete(ws);
 		},
 		message(ws, msg)
 		{
 			// TODO: none
-		}
+		},
 	},
 } satisfies Serve;

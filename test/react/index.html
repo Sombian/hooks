@@ -8,7 +8,8 @@
 		<div id="root"></div>
 		<script src="./index.js"></script>
 	</body>
-	<script>
-		new WebSocket("ws://localhost:3000").addEventListener("message", (event) => location.reload());
-	</script>
 </html>
+
+<script>
+	new WebSocket(`ws://${location.host}`).addEventListener("message", (event) => location.reload());
+</script>
