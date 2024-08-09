@@ -1,8 +1,8 @@
 {
 	"scripts":
 	{
-		"test(react)": "bun test/react/index.ts --hot",
-		"test(solidjs)": "bun test/solidjs/index.ts --hot"
+		"test(react)": "bun test/index.ts --target react",
+		"test(solidjs)": "bun test/index.ts --target solidjs"
 	},
 	"dependencies":
 	{
