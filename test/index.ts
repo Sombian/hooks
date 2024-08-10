@@ -16,7 +16,7 @@ function build()
 	});
 }
 
-const [watchers, clients] = [new Set<fs.FSWatcher>, new Set<ServerWebSocket>()];
+const [watchers, clients] = [new Set<fs.FSWatcher>(), new Set<ServerWebSocket>()];
 
 watchers.add(fs.watch(path.join(import.meta.dir, folder, "index.tsx"), { recursive: true }));
 watchers.add(fs.watch(path.join(import.meta.dir, "..", "src", folder), { recursive: true }));
