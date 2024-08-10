@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-const [CACHE, TARGET, CHANNEL] = [new Map<string, unknown>(), new EventTarget(), new BroadcastChannel("useSyncState")];
+const [STORE, TARGET, CHANNEL] = [new Map<string, unknown>(), new EventTarget(), new BroadcastChannel("useSyncState")];
 
 const enum MessageType
 {
@@ -20,7 +20,7 @@ class Message<T>
 
 export default function useSyncState<T>(key: string, fallback: T)
 {
-	const [data, setData] = useState(CACHE.has(key) ? CACHE.get(key) as T : fallback);
+	const init = useRef(false); const [data, setData] = useState(STORE.has(key) ? STORE.get(key) as T : fallback);
 
 	const communicate = useCallback((msg: Message<T>) =>
 	{
@@ -36,7 +36,10 @@ export default function useSyncState<T>(key: string, fallback: T)
 					//
 					// STEP 3. send back data
 					//
-					CHANNEL.postMessage(new Message(MessageType.UPDATE, key, data));
+					if (init.current)
+					{
+						CHANNEL.postMessage(new Message(MessageType.UPDATE, key, data));
+					}
 					break;
 				}
 				case MessageType.UPDATE:
@@ -44,7 +47,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 					//
 					// STEP 3. reflect msg
 					//
-					setData(msg.value);
+					init.current = true; setData(msg.value);
 					break;
 				}
 			}
@@ -56,10 +59,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 	{
 		function handle(event: CustomEvent)
 		{
-			if (!document.hidden)
-			{
-				communicate(event.detail as Message<T>);
-			}
+			communicate(event.detail as Message<T>);
 		}
 		// @ts-ignore
 		TARGET.addEventListener("msg", handle);
@@ -72,10 +72,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 	{
 		function handle(event: MessageEvent)
 		{
-			if (!document.hidden)
-			{
-				communicate(event.data as Message<T>);
-			}
+			communicate(event.data as Message<T>);
 		}
 		CHANNEL.addEventListener("message", handle);
 		return () => CHANNEL.removeEventListener("message", handle);
@@ -87,13 +84,10 @@ export default function useSyncState<T>(key: string, fallback: T)
 	{
 		function handle(event: Event)
 		{
-			if (!document.hidden)
-			{
-				//
-				// STEP 1. synchronize
-				//
-				CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
-			}
+			//
+			// STEP 1. synchronize
+			//
+			CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
 		}
 		document.addEventListener("visibilitychange", handle);
 		return () => document.removeEventListener("visibilitychange", handle);
@@ -122,7 +116,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 			//
 			// STEP 3. (waterfall) components -> page -> tabs
 			//
-			setData(signal); TARGET.dispatchEvent(CACHE.set(key, signal) && new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
+			init.current = true; setData(signal); TARGET.dispatchEvent(STORE.set(key, signal) && new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
 		}
 	},
 	[key, data]);
