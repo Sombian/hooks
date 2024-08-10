@@ -16,7 +16,7 @@ function build()
 	});
 }
 
-const [watchers, clients] = [new Set<fs.FSWatcher>(), new Set<ServerWebSocket>()];
+const [watchers, sockets] = [new Set<fs.FSWatcher>(), new Set<ServerWebSocket>()];
 
 watchers.add(fs.watch(path.join(import.meta.dir, folder, "index.tsx"), { recursive: true }));
 watchers.add(fs.watch(path.join(import.meta.dir, "..", "src", folder), { recursive: true }));
@@ -27,9 +27,9 @@ for (const watcher of watchers)
 	{
 		build().then(() =>
 		{
-			for (const client of clients)
+			for (const socket of sockets)
 			{
-				client.send(":3");
+				socket.send(":3");
 			}
 		});
 	});
@@ -73,11 +73,11 @@ export default
 	{
 		open(ws)
 		{
-			clients.add(ws);
+			sockets.add(ws);
 		},
 		close(ws)
 		{
-			clients.delete(ws);
+			sockets.delete(ws);
 		},
 		message(ws, msg)
 		{

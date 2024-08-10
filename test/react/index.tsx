@@ -1,15 +1,42 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
+import useQuery from "@/react/useQuery";
 import useSyncState from "@/react/useSyncState";
 
 function App()
+{
+	return (
+		<main>
+			<React.Suspense fallback="...">
+				<UseQuery />
+			</React.Suspense>
+			<hr/>
+			<React.Suspense fallback="...">
+				<UseSyncState />
+			</React.Suspense>
+		</main>
+	);
+}
+
+function UseQuery()
+{
+	throw new Promise(() => {});
+
+	return (
+		<>
+			WIP
+		</>
+	);
+}
+
+function UseSyncState()
 {
 	const [foo, setFoo] = useSyncState("test", 0);
 	const [bar, setBar] = useSyncState("test", 5);
 
 	return (
-		<main>
+		<>
 			<table border={1}>
 				<thead>
 					<th>foo</th>
@@ -38,7 +65,7 @@ function App()
 					bar::decrease
 				</button>
 			</div>
-		</main>
+		</>
 	);
 }
 
