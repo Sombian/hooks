@@ -79,30 +79,12 @@ export default function useSyncState<T>(key: string, fallback: T)
 	},
 	[communicate]);
 
-	/** @see https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API */
 	useEffect(() =>
 	{
-		function handle(event: Event)
-		{
-			//
-			// STEP 1. synchronize
-			//
-			CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
-		}
-		document.addEventListener("visibilitychange", handle);
-		return () => document.removeEventListener("visibilitychange", handle);
-	},
-	[key, data]);
-
-	useEffect(() =>
-	{
-		if (!document.hidden)
-		{
-			//
-			// STEP 1. synchronize
-			//
-			CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
-		}
+		//
+		// STEP 1. synchronize
+		//
+		CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
 	},
 	[]);
 
