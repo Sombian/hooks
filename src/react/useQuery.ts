@@ -11,12 +11,9 @@ const enum RequestType
 	ALLOCATE,
 }
 
-class Request<T>
+interface Request<T>
 {
-	constructor(readonly type: RequestType, readonly key: string, readonly value?: T)
-	{
-		// TODO: none
-	}
+	readonly type: RequestType; readonly key: string; readonly value?: T;
 }
 
 const enum ResponseType
@@ -26,12 +23,9 @@ const enum ResponseType
 	SUCCESS,
 }
 
-class Response<T>
+interface Response<T>
 {
-	constructor(readonly type: ResponseType, readonly key: string, readonly value: T)
-	{
-		// TODO: none
-	}
+	readonly type: ResponseType, readonly key: string, readonly value: T;
 }
 
 /** @see https://developer.mozilla.org/en-US/docs/Glossary/Base64#the_unicode_problem */
@@ -60,7 +54,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					{
 						if (!STORE.has(request.key))
 						{
-							port.postMessage(new Response(ResponseType.EMPTY, request.key, null));
+							port.postMessage({ type: ResponseType.EMPTY, key: request.key, value: null } satisfies Response<typeof request.value>);
 						}
 						else
 						{
@@ -68,11 +62,11 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 
 							if (cache === "init")
 							{
-								port.postMessage(new Response(ResponseType.LOADING, request.key, null));
+								port.postMessage({ type: ResponseType.LOADING, key: request.key, value: null } satisfies Response<typeof request.value>);
 							}
 							else
 							{
-								port.postMessage(new Response(ResponseType.SUCCESS, request.key, cache.value));
+								port.postMessage({ type: ResponseType.SUCCESS, key: request.key, value: cache.value } satisfies Response<typeof request.value>);
 							}
 						}
 						break;
@@ -85,7 +79,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 						{
 							if (port !== entry)
 							{
-								entry.postMessage(new Response(ResponseType.SUCCESS, request.key, request.value));
+								entry.postMessage({ type: ResponseType.SUCCESS, key: request.key, value: request.value } satisfies Response<typeof request.value>);
 							}
 						}
 						break;
@@ -98,7 +92,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 						{
 							if (port !== entry)
 							{
-								entry.postMessage(new Response(ResponseType.LOADING, request.key, null));
+								entry.postMessage({ type: ResponseType.LOADING, key: request.key, value: null } satisfies Response<typeof request.value>);
 							}
 						}
 						break;
@@ -144,7 +138,7 @@ interface QueryOption<T, D>
 	extract?: (_: T) => D;
 }
 
-export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: React.DependencyList,
+export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: React.DependencyList = [],
 {
 	retry = 0,
 	expire = 60000,
@@ -155,13 +149,13 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 	refetch_on_reconnect = true,
 	extract = ((_) => _ as unknown as D),
 }
-: QueryOption<T, D>)
+: QueryOption<T, D> = {})
 {
 	const key = useRef<string>();
 	
 	const [state, setState] = useState<QueryState<D>>({ isLoading: true, isValidating: true });
 	
-	const subscribe = useRef<Set<keyof typeof state>>(new Set()); const suspenser = useRef(defer());
+	const subscribe = useRef<Set<keyof typeof state>>(new Set());
 	//
 	// cherry-pick update
 	//
@@ -176,7 +170,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 		// re-render
 		if (subscribe.current.has(key))
 		{
-			setState((_) => ({..._ }))
+			setState((_) => ({..._, [key]: value }));
 		}
 	},
 	[]);
@@ -204,7 +198,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 							ON_GOING.add(key.current);
 
 							// STEP 6. allocate cache
-							WORKER.port.postMessage(new Request(RequestType.ALLOCATE, key.current));
+							WORKER.port.postMessage({ type: RequestType.ALLOCATE, key: key.current, value: undefined } satisfies Request<T>);
 
 							// STEP 8. fetch
 							(function recursive(retries: number)
@@ -220,14 +214,11 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 									update("isLoading", false);
 									update("isValidating", false);
 
-									// STEP 11. un-suspense
-									suspenser.current.resolve(null);
-
-									// STEP 12. allow request
+									// STEP 11. allow request
 									ON_GOING.delete(key.current as string);
 
-									// STEP 13. update cache
-									WORKER.port.postMessage(new Request(RequestType.ASSIGN, key.current as string, data));
+									// STEP 12. update cache
+									WORKER.port.postMessage({ type: RequestType.ASSIGN, key: key.current as string, value: data } satisfies Request<T>);
 								})
 								.catch((error) =>
 								{
@@ -239,9 +230,6 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 										// STEP ?. update status
 										update("isLoading", false);
 										update("isValidating", false);
-
-										// STEP ?. un-suspense
-										suspenser.current.resolve(null);
 									}
 									else
 									{
@@ -257,6 +245,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 					case ResponseType.LOADING:
 					{
 						// STEP 4. update status
+						// update("isLoading", true);
 						update("isValidating", true);
 						break;
 					}
@@ -273,9 +262,6 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 							// STEP 6. update status
 							update("isLoading", false);
 							update("isValidating", false);
-
-							// STEP 7. un-suspense
-							suspenser.current.resolve(null);
 						}
 						break;
 					}
@@ -296,7 +282,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 			// STEP 2. synchronize
 			if (key.current && !document.hidden)
 			{
-				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
+				WORKER.port.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
 			}
 		}
 		document.addEventListener("visibilitychange", handle);
@@ -312,7 +298,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 			// STEP 2. synchronize
 			if (key.current && !document.hidden)
 			{
-				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
+				WORKER.port.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
 			}
 		}
 		window.addEventListener("online", handle);
@@ -328,15 +314,10 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 			key.current = [sha256, JSON.stringify(criteria)].join("=");
 
 			// STEP 2. synchronize
-			WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
+			WORKER.port.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
 		});
 	},
 	[fetcher, criteria]);
-
-	if (suspense && state.isLoading)
-	{
-		throw suspenser.current.promise;
-	}
 
 	return {
 		get data()
@@ -356,21 +337,6 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 			subscribe.current.add("isValidating"); return state.isValidating;
 		},
 	} as typeof state;
-}
-
-/** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/withResolvers */
-function defer()
-{
-	let resolver!: Parameters<ConstructorParameters<typeof Promise>[0]>[0];
-	let rejecter!: Parameters<ConstructorParameters<typeof Promise>[0]>[1];
-
-	const promise = new Promise((resolve, reject) =>
-	{
-		resolver = resolve;
-		rejecter = reject;
-	});
-
-	return { promise, resolve: resolver, reject: rejecter };
 }
 
 /** @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest */

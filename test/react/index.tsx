@@ -19,13 +19,31 @@ function App()
 	);
 }
 
+function fetcher()
+{
+	console.debug("Connecting Heart..!");
+	return new Promise<string>((resolve, reject) => setTimeout(() => resolve(":3"), 1000 * 1.5));
+}
+
 function UseQuery()
 {
-	throw new Promise(() => {});
+	const { data: foo } = useQuery(fetcher, [], { suspense: true });
+	const { data: bar } = useQuery(fetcher, [], { suspense: true });
 
 	return (
 		<>
-			WIP
+			<table border={1}>
+				<thead>
+					<th>foo</th>
+					<th>bar</th>
+				</thead>
+				<tbody>
+					<tr>
+						<td>{foo}</td>
+						<td>{bar}</td>
+					</tr>
+				</tbody>
+			</table>
 		</>
 	);
 }
