@@ -197,7 +197,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 						// STEP 4. dedupe
 						if (!ON_GOING.has(key.current))
 						{
-							// STEP 5. reflect
+							// STEP 5. update status
 							update("isValidating", true);
 
 							// STEP 5. de-dupe requests
@@ -220,10 +220,13 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 									update("isLoading", false);
 									update("isValidating", false);
 
-									// STEP 11. allow request
+									// STEP 11. un-suspense
+									suspenser.current.resolve(null);
+
+									// STEP 12. allow request
 									ON_GOING.delete(key.current as string);
 
-									// STEP 12. update cache
+									// STEP 13. update cache
 									WORKER.port.postMessage(new Request(RequestType.ASSIGN, key.current as string, data));
 								})
 								.catch((error) =>
@@ -236,6 +239,9 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 										// STEP ?. update status
 										update("isLoading", false);
 										update("isValidating", false);
+
+										// STEP ?. un-suspense
+										suspenser.current.resolve(null);
 									}
 									else
 									{
@@ -251,7 +257,6 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 					case ResponseType.LOADING:
 					{
 						// STEP 4. update status
-						// update("isLoading", true);
 						update("isValidating", true);
 						break;
 					}
@@ -268,6 +273,9 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 							// STEP 6. update status
 							update("isLoading", false);
 							update("isValidating", false);
+
+							// STEP 7. un-suspense
+							suspenser.current.resolve(null);
 						}
 						break;
 					}
