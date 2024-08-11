@@ -24,30 +24,28 @@ export default function useSyncState<T>(key: string, fallback: T)
 
 	const communicate = useCallback((msg: Message<T>) =>
 	{
-		//
-		// STEP 2. match key & value
-		//
-		if (key === msg.key && data !== msg.value)
+		// STEP 2. match key
+		if (key === msg.key)
 		{
 			switch (msg.type)
 			{
 				case MessageType.SYNC:
 				{
-					//
-					// STEP 3. send back data
-					//
 					if (init.current)
 					{
+						// STEP 3. send back data
 						CHANNEL.postMessage(new Message(MessageType.UPDATE, key, data));
 					}
 					break;
 				}
 				case MessageType.UPDATE:
 				{
-					//
-					// STEP 3. reflect msg
-					//
-					init.current = true; setData(msg.value);
+					// TODO: deep compare objects
+					if (data !== msg.value)
+					{
+						// STEP 3. reflect msg data
+						init.current = true; setData(msg.value);
+					}
 					break;
 				}
 			}
@@ -81,9 +79,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 
 	useEffect(() =>
 	{
-		//
 		// STEP 1. synchronize
-		//
 		CHANNEL.postMessage(new Message<T>(MessageType.SYNC, key, data));
 	},
 	[]);
@@ -95,9 +91,8 @@ export default function useSyncState<T>(key: string, fallback: T)
 		if (signal !== data)
 		{
 			const msg = new Message(MessageType.UPDATE, key, signal);
-			//
+
 			// STEP 3. (waterfall) components -> page -> tabs
-			//
 			init.current = true; setData(signal); TARGET.dispatchEvent(STORE.set(key, signal) && new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
 		}
 	},

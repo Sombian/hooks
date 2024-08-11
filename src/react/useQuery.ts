@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 
 const ON_GOING = new Set<string>();
 
@@ -43,7 +43,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 	{
 		"use strict";
 
-		const ports: MessagePort[] = []; const store = new Map<string, "init" | { since: number; value: unknown; }>();
+		const PORTS: MessagePort[] = []; const STORE = new Map<string, "init" | { since: number; value: unknown; }>();
 
 		// @ts-ignore
 		self.addEventListener("connect", (event: MessageEvent) =>
@@ -58,13 +58,13 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 				{
 					case RequestType.SYNC:
 					{
-						if (!store.has(request.key))
+						if (!STORE.has(request.key))
 						{
 							port.postMessage(new Response(ResponseType.EMPTY, request.key, null));
 						}
 						else
 						{
-							const cache = store.get(request.key)!;
+							const cache = STORE.get(request.key)!;
 
 							if (cache === "init")
 							{
@@ -79,26 +79,26 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 					}
 					case RequestType.ASSIGN:
 					{
-						store.set(request.key, { since: Date.now(), value: request.value });
+						STORE.set(request.key, { since: Date.now(), value: request.value });
 
-						for (const tab of ports)
+						for (const entry of PORTS)
 						{
-							if (port !== tab)
+							if (port !== entry)
 							{
-								tab.postMessage(new Response(ResponseType.SUCCESS, request.key, request.value));
+								entry.postMessage(new Response(ResponseType.SUCCESS, request.key, request.value));
 							}
 						}
 						break;
 					}
 					case RequestType.ALLOCATE:
 					{
-						store.set(request.key, "init");
+						STORE.set(request.key, "init");
 
-						for (const tab of ports)
+						for (const entry of PORTS)
 						{
-							if (port !== tab)
+							if (port !== entry)
 							{
-								tab.postMessage(new Response(ResponseType.LOADING, request.key, null));
+								entry.postMessage(new Response(ResponseType.LOADING, request.key, null));
 							}
 						}
 						break;
@@ -106,7 +106,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 				}
 			});
 			// "LINK STATO..!"
-			ports.push(port); port.start();
+			PORTS.push(port); port.start();
 		});
 	}
 	.toString()
@@ -116,82 +116,158 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 // ..!
 WORKER.port.start();
 
-export default function useQuery<T, D>(fetcher: () => Promise<T>, options: { retry?: number; expire?: number; suspense?: boolean; refresh_on_focus?: boolean; refresh_on_interval?: number; refresh_on_reconnect?: boolean; extract?: (data: T) => D; onError?: (error: Error) => void; onSuccess?: (data: T) => void; } = {})
+interface QueryState<T>
 {
-	const key = useRef<string>(); const state = useRef<{ data?: D; error?: Error; isLoading: boolean; isFetching: boolean; }>({ isLoading: true, isFetching: true }); const suspenser = useRef(defer()); const dependencies = useRef<Set<string>>(new Set());
+	data?: T;
+	error?: Error;
+	isLoading: boolean;
+	isValidating: boolean;
+}
 
-	const { data, error, isLoading, isFetching } = state.current;
+interface QueryOption<T, D>
+{
+	/** how many times should fetcher retry if an error occurs? */
+	retry?: number;
+	/** how long will it took for cache to be considered stale? */
+	expire?: number;
+	/** should it suspense? */
+	suspense?: boolean;
+	/** should it sync when you focus the tab? */
+	sync_on_focus?: boolean;
+	/** should it sync even if the tab is hidden? */
+	sync_on_hidden?: boolean;
+	/** should it refetch on certain interval clock? */
+	refetch_on_interval?: number;
+	/** should it refetch when network is back online? */
+	refetch_on_reconnect?: boolean;
+	/** refine response */
+	extract?: (_: T) => D;
+}
+
+export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: React.DependencyList,
+{
+	retry = 0,
+	expire = 60000,
+	suspense = false,
+	sync_on_focus = true,
+	sync_on_hidden = true,
+	refetch_on_interval = NaN,
+	refetch_on_reconnect = true,
+	extract = ((_) => _ as unknown as D),
+}
+: QueryOption<T, D>)
+{
+	const key = useRef<string>();
+	
+	const [state, setState] = useState<QueryState<D>>({ isLoading: true, isValidating: true });
+	
+	const subscribe = useRef<Set<keyof typeof state>>(new Set()); const suspenser = useRef(defer());
 	//
-	// for <Suspense/> component
+	// cherry-pick update
 	//
-	if (isLoading && options.suspense)
+	const update = useCallback(<K extends keyof typeof state>(key: K, value: typeof state[K]) =>
 	{
-		throw suspenser.current.promise;
-	}
+		// TODO: deep compare objects
+		if (state[key] === value) return;
+
+		// silent update
+		state[key] = value;
+
+		// re-render
+		if (subscribe.current.has(key))
+		{
+			setState((_) => ({..._ }))
+		}
+	},
+	[]);
 
 	useEffect(() =>
 	{
 		function handle(event: MessageEvent)
 		{
 			const response: Response<T> = event.data;
-			//
+
 			// STEP 3. match key & value
-			//
 			if (key.current === response.key)
 			{
 				switch (response.type)
 				{
 					case ResponseType.EMPTY:
 					{
-						//
 						// STEP 4. dedupe
-						//
 						if (!ON_GOING.has(key.current))
 						{
-							//
-							// STEP 5. prevent duplication
-							//
+							// STEP 5. reflect
+							update("isValidating", true);
+
+							// STEP 5. de-dupe requests
 							ON_GOING.add(key.current);
-							//
+
 							// STEP 6. allocate cache
-							//
 							WORKER.port.postMessage(new Request(RequestType.ALLOCATE, key.current));
-							//
-							// STEP 7. fetch data
-							//
-							fetcher().then((data) =>
+
+							// STEP 8. fetch
+							(function recursive(retries: number)
 							{
-								//
-								// STEP 8. reflect fetcher
-								//
-								setData(data);
-								//
-								// STEP 9. allow duplication
-								//
-								ON_GOING.delete(key.current as string);
-								//
-								// STEP 10. update cache
-								//
-								WORKER.port.postMessage(new Request(RequestType.ASSIGN, key.current as string, data));
+								fetcher().then((data) =>
+								{
+									const signal = extract(data);
+
+									// STEP 9. reflect response
+									update("data", signal);
+
+									// STEP 10. update status
+									update("isLoading", false);
+									update("isValidating", false);
+
+									// STEP 11. allow request
+									ON_GOING.delete(key.current as string);
+
+									// STEP 12. update cache
+									WORKER.port.postMessage(new Request(RequestType.ASSIGN, key.current as string, data));
+								})
+								.catch((error) =>
+								{
+									if (retries >= retry)
+									{
+										// STEP ?. reflect response
+										update("error", error);
+
+										// STEP ?. update status
+										update("isLoading", false);
+										update("isValidating", false);
+									}
+									else
+									{
+										// STEP ?. refetch
+										recursive(retries + 1);
+									}
+								});
 							})
-							.catch((error) =>
-							{
-								// TODO: retry
-							});
+							(0);
 						}
+						break;
+					}
+					case ResponseType.LOADING:
+					{
+						// STEP 4. update status
+						// update("isLoading", true);
+						update("isValidating", true);
 						break;
 					}
 					case ResponseType.SUCCESS:
 					{
-						//
 						// STEP 4. compare data
-						//
-						if (data !== response.value)
+						if (state.data !== response.value)
 						{
-							//
+							const signal = extract(response.value);
+
 							// STEP 5. reflect response
-							//
-							setData(response.value);
+							update("data", signal);
+
+							// STEP 6. update status
+							update("isLoading", false);
+							update("isValidating", false);
 						}
 						break;
 					}
@@ -202,16 +278,14 @@ export default function useQuery<T, D>(fetcher: () => Promise<T>, options: { ret
 		WORKER.port.addEventListener("message", handle);
 		return () => WORKER.port.removeEventListener("message", handle);
 	},
-	[data, fetcher]);
+	[fetcher]);
 
 	/** @see https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API */
 	useEffect(() =>
 	{
 		function handle(event: Event)
 		{
-			//
 			// STEP 2. synchronize
-			//
 			if (key.current && !document.hidden)
 			{
 				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
@@ -220,17 +294,15 @@ export default function useQuery<T, D>(fetcher: () => Promise<T>, options: { ret
 		document.addEventListener("visibilitychange", handle);
 		return () => document.removeEventListener("visibilitychange", handle);
 	},
-	[key]);
+	[key.current]);
 
 	/** @see https://developer.mozilla.org/en-US/docs/Web/API/Navigator/onLine */
 	useEffect(() =>
 	{
 		function handle(event: Event)
 		{
-			//
 			// STEP 2. synchronize
-			//
-			if (key.current && navigator.onLine)
+			if (key.current && !document.hidden)
 			{
 				WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
 			}
@@ -238,42 +310,44 @@ export default function useQuery<T, D>(fetcher: () => Promise<T>, options: { ret
 		window.addEventListener("online", handle);
 		return () => window.removeEventListener("online", handle);
 	},
-	[key]);
+	[key.current]);
 
 	useEffect(() =>
 	{
 		hash(fetcher.toString(), "SHA-256").then((sha256) =>
 		{
-			//
 			// STEP 1. hash
-			//
-			key.current = sha256;
-			//
+			key.current = [sha256, JSON.stringify(criteria)].join("=");
+
 			// STEP 2. synchronize
-			//
 			WORKER.port.postMessage(new Request(RequestType.SYNC, key.current));
 		});
 	},
-	[fetcher]);
+	[fetcher, criteria]);
+
+	if (suspense && state.isLoading)
+	{
+		throw suspenser.current.promise;
+	}
 
 	return {
 		get data()
 		{
-			dependencies.current.add("data"); return data;
+			subscribe.current.add("data"); return state.data;
 		},
 		get error()
 		{
-			dependencies.current.add("error"); return error;
+			subscribe.current.add("error"); return state.error;
 		},
 		get isLoading()
 		{
-			dependencies.current.add("isLoading"); return isLoading;
+			subscribe.current.add("isLoading"); return state.isLoading;
 		},
-		get isFetching()
+		get isValidating()
 		{
-			dependencies.current.add("isFetching"); return isFetching;
+			subscribe.current.add("isValidating"); return state.isValidating;
 		},
-	};
+	} as typeof state;
 }
 
 /** @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/withResolvers */
@@ -294,8 +368,6 @@ function defer()
 /** @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest */
 async function hash(value: string, algorithm: AlgorithmIdentifier)
 {
-	//
 	// converts an ArrayBuffer to a hex string
-	//
 	return Array.from(new Uint8Array(await crypto.subtle.digest(algorithm, new TextEncoder().encode(value)))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
