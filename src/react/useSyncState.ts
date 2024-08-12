@@ -59,9 +59,9 @@ export default function useSyncState<T>(key: string, fallback: T)
 		{
 			communicate(event.detail as Message<T>);
 		}
-		// @ts-ignore
+		// @ts-expect-error custom event
 		TARGET.addEventListener("msg", handle);
-		// @ts-ignore
+		// @ts-expect-error custom event
 		return () => TARGET.removeEventListener("msg", handle);
 	},
 	[communicate]);

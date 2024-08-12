@@ -39,7 +39,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 
 		const PORTS: MessagePort[] = []; const STORE = new Map<string, "init" | { since: number; value: unknown; }>();
 
-		// @ts-ignore
+		// @ts-expect-error why..?
 		self.addEventListener("connect", (event: MessageEvent) =>
 		{
 			const port = event.ports[0];
@@ -141,11 +141,17 @@ interface QueryOption<T, D>
 export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependencies: React.DependencyList = [],
 {
 	retry = 0,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	expire = 60000,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	suspense = false,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	sync_on_focus = true,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	sync_on_hidden = true,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	refetch_on_interval = NaN,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	refetch_on_reconnect = true,
 	extract = ((_) => _ as unknown as D),
 }
@@ -246,8 +252,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 										});
 									}
 								});
-							})
-							(0);
+							})(0);
 						}
 						break;
 					}
@@ -267,6 +272,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 						{
 							const signal = extract(response.value);
 
+							// STEP 5. update
 							setState(
 							{
 								data: signal,
@@ -288,6 +294,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 	/** @see https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API */
 	useEffect(() =>
 	{
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		function handle(event: Event)
 		{
 			// STEP 2. synchronize
@@ -304,6 +311,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 	/** @see https://developer.mozilla.org/en-US/docs/Web/API/Navigator/onLine */
 	useEffect(() =>
 	{
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		function handle(event: Event)
 		{
 			// STEP 2. synchronize

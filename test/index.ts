@@ -22,6 +22,7 @@ watchers.add(fs.watch(path.join(import.meta.dir, "..", "src", folder), { recursi
 
 for (const watcher of watchers)
 {
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	watcher.addListener("change", (event) =>
 	{
 		build().then(() =>
@@ -34,6 +35,7 @@ for (const watcher of watchers)
 	});
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 process.on("SIGINT", (event) =>
 {
 	for (const watcher of watchers)
@@ -78,6 +80,7 @@ export default
 		{
 			sockets.delete(ws);
 		},
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		message(ws, msg)
 		{
 			// TODO: none

@@ -22,7 +22,7 @@ function App()
 function fetcher()
 {
 	console.debug("Connecting Heart..!");
-	return new Promise<string>((resolve, reject) => setTimeout(() => resolve(":3"), 1000 * 1.5));
+	return new Promise<string>((resolve) => setTimeout(() => resolve(":3"), 1000 * 1.5));
 }
 
 function UseQuery()
