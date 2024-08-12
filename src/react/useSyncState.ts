@@ -40,7 +40,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 				}
 				case MessageType.UPDATE:
 				{
-					// TODO: deep compare objects
+					// TODO: deep compare
 					if (data !== msg.value)
 					{
 						// STEP 3. reflect msg data

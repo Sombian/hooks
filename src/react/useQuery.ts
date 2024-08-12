@@ -106,9 +106,9 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 	.toString()
 	+
 	")()"
-))));
+)))).port;
 // ..!
-WORKER.port.start();
+WORKER.start();
 
 interface QueryState<T>
 {
@@ -120,25 +120,25 @@ interface QueryState<T>
 
 interface QueryOption<T, D>
 {
-	/** how many times should fetcher retry if an error occurs? */
+	/** How many times can the fetcher retry if an error occurs? */
 	retry?: number;
-	/** how long will it took for cache to be considered stale? */
+	/** How long before the cache is considered stale (unit: ms)? */
 	expire?: number;
-	/** should it suspense? */
+	/** Should the query use <React.Suspense> for loading states? */
 	suspense?: boolean;
-	/** should it sync when you focus the tab? */
+	/** Should the query sync data when the tab gains focus? */
 	sync_on_focus?: boolean;
-	/** should it sync even if the tab is hidden? */
+	/** Should the query sync data even if the tab is hidden? */
 	sync_on_hidden?: boolean;
-	/** should it refetch on certain interval clock? */
+	/** Should the query refetch data at regular intervals? */
 	refetch_on_interval?: number;
-	/** should it refetch when network is back online? */
+	/** Should the query refetch data when reconnects? */
 	refetch_on_reconnect?: boolean;
-	/** refine response */
-	extract?: (_: T) => D;
+	/** Function to transform the response data */
+	extract?: (data: T) => D;
 }
 
-export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: React.DependencyList = [],
+export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependencies: React.DependencyList = [],
 {
 	retry = 0,
 	expire = 60000,
@@ -151,29 +151,33 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 }
 : QueryOption<T, D> = {})
 {
-	const key = useRef<string>();
-	
-	const [state, setState] = useState<QueryState<D>>({ isLoading: true, isValidating: true });
-	
-	const subscribe = useRef<Set<keyof typeof state>>(new Set());
-	//
-	// cherry-pick update
-	//
-	const update = useCallback(<K extends keyof typeof state>(key: K, value: typeof state[K]) =>
+	const key = useRef<string>(); const [state, DO_NOT_USE_THIS] = useState<QueryState<D>>(
 	{
-		// TODO: deep compare objects
-		if (state[key] === value) return;
+		isLoading: true,
+		isValidating: true,
+	});
 
-		// silent update
-		state[key] = value;
+	// cherry-pick update
+	const deps = useRef(new Set<keyof typeof state>()); const setState = useCallback((_: Partial<typeof state>) =>
+	{
+		let changes = 0;
 
-		// re-render
-		if (subscribe.current.has(key))
+		for (const [key, value] of Object.entries(_) as [keyof typeof _, typeof _[keyof typeof _]][])
 		{
-			setState((_) => ({..._, [key]: value }));
+			// TODO: deep compare
+			if (state[key] !== value)
+			{
+				// @ts-expect-error silent update
+				state[key] = value; if (deps.current.has(key)) changes++;
+			}
+		}
+		// re-render
+		if (0 < changes)
+		{
+			DO_NOT_USE_THIS((_) => ({ ..._ }));
 		}
 	},
-	[]);
+	[state]);
 
 	useEffect(() =>
 	{
@@ -191,50 +195,55 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 						// STEP 4. dedupe
 						if (!ON_GOING.has(key.current))
 						{
-							// STEP 5. update status
-							update("isValidating", true);
+							// STEP 5. update
+							setState(
+							{
+								isValidating: true,
+							});
 
-							// STEP 5. de-dupe requests
+							// STEP 6. de-dupe requests
 							ON_GOING.add(key.current);
 
-							// STEP 6. allocate cache
-							WORKER.port.postMessage({ type: RequestType.ALLOCATE, key: key.current, value: undefined } satisfies Request<T>);
+							// STEP 7. allocate cache
+							WORKER.postMessage({ type: RequestType.ALLOCATE, key: key.current, value: undefined } satisfies Request<T>);
 
 							// STEP 8. fetch
-							(function recursive(retries: number)
+							(function call(retries: number)
 							{
 								fetcher().then((data) =>
 								{
 									const signal = extract(data);
 
-									// STEP 9. reflect response
-									update("data", signal);
+									// STEP 9. update
+									setState(
+									{
+										data: signal,
+										isLoading: false,
+										isValidating: false,
+									});
 
-									// STEP 10. update status
-									update("isLoading", false);
-									update("isValidating", false);
-
-									// STEP 11. allow request
+									// STEP 10. allow request
 									ON_GOING.delete(key.current as string);
 
-									// STEP 12. update cache
-									WORKER.port.postMessage({ type: RequestType.ASSIGN, key: key.current as string, value: data } satisfies Request<T>);
+									// STEP 11. update cache
+									WORKER.postMessage({ type: RequestType.ASSIGN, key: key.current as string, value: data } satisfies Request<T>);
 								})
 								.catch((error) =>
 								{
-									if (retries >= retry)
+									if (retries < retry)
 									{
-										// STEP ?. reflect response
-										update("error", error);
-
-										// STEP ?. update status
-										update("isLoading", false);
-										update("isValidating", false);
+										// STEP ?. retry
+										call(retries + 1);
 									}
 									else
 									{
-										// STEP ?. refetch
-										recursive(retries + 1);
+										// STEP ?. update
+										setState(
+										{
+											error: error,
+											isLoading: false,
+											isValidating: false,
+										});
 									}
 								});
 							})
@@ -244,9 +253,11 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 					}
 					case ResponseType.LOADING:
 					{
-						// STEP 4. update status
-						// update("isLoading", true);
-						update("isValidating", true);
+						// STEP 4. update
+						setState(
+						{
+							isValidating: true,
+						});
 						break;
 					}
 					case ResponseType.SUCCESS:
@@ -256,12 +267,12 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 						{
 							const signal = extract(response.value);
 
-							// STEP 5. reflect response
-							update("data", signal);
-
-							// STEP 6. update status
-							update("isLoading", false);
-							update("isValidating", false);
+							setState(
+							{
+								data: signal,
+								isLoading: false,
+								isValidating: false,
+							});
 						}
 						break;
 					}
@@ -269,8 +280,8 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 				// console.debug(response);
 			}
 		}
-		WORKER.port.addEventListener("message", handle);
-		return () => WORKER.port.removeEventListener("message", handle);
+		WORKER.addEventListener("message", handle);
+		return () => WORKER.removeEventListener("message", handle);
 	},
 	[fetcher]);
 
@@ -282,7 +293,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 			// STEP 2. synchronize
 			if (key.current && !document.hidden)
 			{
-				WORKER.port.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
+				WORKER.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
 			}
 		}
 		document.addEventListener("visibilitychange", handle);
@@ -298,7 +309,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 			// STEP 2. synchronize
 			if (key.current && !document.hidden)
 			{
-				WORKER.port.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
+				WORKER.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
 			}
 		}
 		window.addEventListener("online", handle);
@@ -311,30 +322,30 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, criteria: 
 		hash(fetcher.toString(), "SHA-256").then((sha256) =>
 		{
 			// STEP 1. hash
-			key.current = [sha256, JSON.stringify(criteria)].join("=");
+			key.current = [sha256, JSON.stringify(dependencies)].join("=");
 
 			// STEP 2. synchronize
-			WORKER.port.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
+			WORKER.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
 		});
 	},
-	[fetcher, criteria]);
+	[fetcher, dependencies]);
 
 	return {
 		get data()
 		{
-			subscribe.current.add("data"); return state.data;
+			deps.current.add("data"); return state.data;
 		},
 		get error()
 		{
-			subscribe.current.add("error"); return state.error;
+			deps.current.add("error"); return state.error;
 		},
 		get isLoading()
 		{
-			subscribe.current.add("isLoading"); return state.isLoading;
+			deps.current.add("isLoading"); return state.isLoading;
 		},
 		get isValidating()
 		{
-			subscribe.current.add("isValidating"); return state.isValidating;
+			deps.current.add("isValidating"); return state.isValidating;
 		},
 	} as typeof state;
 }
