@@ -13,7 +13,7 @@ const enum RequestType
 
 interface Request<T>
 {
-	readonly type: RequestType; readonly key: string; readonly value?: T;
+	readonly type: RequestType; readonly key: string; readonly value: T;
 }
 
 const enum ResponseType
@@ -136,24 +136,28 @@ interface QueryOption<T, D>
 	refetch_on_reconnect?: boolean;
 	/** Function to transform the response data */
 	extract?: (data: T) => D;
+	/** Function to call on failed request */
+	onError?: (error: Error) => void;
+	/** Function to call on successful request */
+	onSuccess?: (data: T) => void;
 }
 
 export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependencies: React.DependencyList = [],
 {
 	retry = 0,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	/*
 	expire = 60000,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	suspense = false,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	sync_on_focus = true,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	sync_on_hidden = true,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	refetch_on_interval = NaN,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	refetch_on_reconnect = true,
-	extract = ((_) => _ as unknown as D),
+	*/
+	extract = (_) => _ as unknown as D,
+	/*
+	onError = (_) => console.error(_),
+	onSuccess = (_) => console.debug(_),
+	*/
 }
 : QueryOption<T, D> = {})
 {
@@ -211,7 +215,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 							ON_GOING.add(key.current);
 
 							// STEP 7. allocate cache
-							WORKER.postMessage({ type: RequestType.ALLOCATE, key: key.current, value: undefined } satisfies Request<T>);
+							WORKER.postMessage({ type: RequestType.ALLOCATE, key: key.current, value: null as T } satisfies Request<T>);
 
 							// STEP 8. fetch
 							(function call(retries: number)
@@ -229,10 +233,10 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 									});
 
 									// STEP 10. allow request
-									ON_GOING.delete(key.current as string);
+									ON_GOING.delete(key.current!);
 
 									// STEP 11. update cache
-									WORKER.postMessage({ type: RequestType.ASSIGN, key: key.current as string, value: data } satisfies Request<T>);
+									WORKER.postMessage({ type: RequestType.ASSIGN, key: key.current!, value: data } satisfies Request<T>);
 								})
 								.catch((error) =>
 								{
@@ -300,7 +304,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 			// STEP 2. synchronize
 			if (key.current && !document.hidden)
 			{
-				WORKER.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
+				WORKER.postMessage({ type: RequestType.SYNC, key: key.current, value: null as T } satisfies Request<T>);
 			}
 		}
 		document.addEventListener("visibilitychange", handle);
@@ -317,7 +321,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 			// STEP 2. synchronize
 			if (key.current && !document.hidden)
 			{
-				WORKER.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
+				WORKER.postMessage({ type: RequestType.SYNC, key: key.current, value: null as T } satisfies Request<T>);
 			}
 		}
 		window.addEventListener("online", handle);
@@ -327,13 +331,13 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 
 	useEffect(() =>
 	{
-		hash(fetcher.toString(), "SHA-256").then((sha256) =>
+		hash(fetcher.toString() + JSON.stringify(dependencies), "SHA-256").then((sha256) =>
 		{
 			// STEP 1. hash
-			key.current = [sha256, JSON.stringify(dependencies)].join("=");
+			key.current = sha256;
 
 			// STEP 2. synchronize
-			WORKER.postMessage({ type: RequestType.SYNC, key: key.current as string, value: undefined } satisfies Request<T>);
+			WORKER.postMessage({ type: RequestType.SYNC, key: key.current, value: null as T } satisfies Request<T>);
 		});
 	},
 	[fetcher, dependencies]);

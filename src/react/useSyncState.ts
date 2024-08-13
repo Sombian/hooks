@@ -93,7 +93,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 			const msg = new Message(MessageType.UPDATE, key, signal);
 
 			// STEP 3. (waterfall) components -> page -> tabs
-			init.current = true; setData(signal); TARGET.dispatchEvent(STORE.set(key, signal) && new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
+			init.current = true; setData(signal); STORE.set(key, signal); TARGET.dispatchEvent(new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
 		}
 	},
 	[key, data]);

@@ -21,8 +21,8 @@ function App()
 
 function fetcher()
 {
-	console.debug("Connecting Heart..!");
-	return new Promise<string>((resolve) => setTimeout(() => resolve(":3"), 1000 * 1.5));
+	console.debug("%cinvoke", "color:#FF5500");
+	return new Promise<string>((resolve) => setTimeout(() => { console.debug("%cresolve", "color:#FF5500"); resolve(":3"); }, 1000 * 1.5));
 }
 
 function UseQuery()
