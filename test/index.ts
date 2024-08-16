@@ -12,6 +12,7 @@ function build()
 	{
 		entrypoints: [path.join(import.meta.dir, folder, "index.tsx")],
 		outdir: path.join(import.meta.dir, folder),
+		minify: true,
 	});
 }
 

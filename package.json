@@ -1,4 +1,5 @@
 {
+	"name": "hooks",
 	"scripts":
 	{
 		"test(react)": "bun --hot test/index.ts --target react",

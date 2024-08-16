@@ -218,7 +218,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 							WORKER.postMessage({ type: RequestType.ALLOCATE, key: key.current, value: null as T } satisfies Request<T>);
 
 							// STEP 8. fetch
-							(function call(retries: number)
+							(function call(stage: number)
 							{
 								fetcher().then((data) =>
 								{
@@ -240,10 +240,10 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 								})
 								.catch((error) =>
 								{
-									if (retries < retry)
+									if (stage < retry)
 									{
 										// STEP ?. retry
-										call(retries + 1);
+										call(stage + 1);
 									}
 									else
 									{
