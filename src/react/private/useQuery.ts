@@ -1,5 +1,7 @@
 "use client";
 
+import is_equal from "@/utils/is_equal";
+
 import { useCallback, useEffect, useState, useRef } from "react";
 
 const ON_GOING = new Set<string>();
@@ -18,7 +20,7 @@ interface Request<T>
 
 const enum ResponseType
 {
-	EMPTY,
+	ABSENCE,
 	LOADING,
 	SUCCESS,
 }
@@ -52,11 +54,7 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 				{
 					case RequestType.SYNC:
 					{
-						if (!STORE.has(request.key))
-						{
-							port.postMessage({ type: ResponseType.EMPTY, key: request.key, value: null } satisfies Response<typeof request.value>);
-						}
-						else
+						if (STORE.has(request.key))
 						{
 							const cache = STORE.get(request.key)!;
 
@@ -68,6 +66,10 @@ const WORKER = new SharedWorker("data:text/javascript;base64," + btoa(String.fro
 							{
 								port.postMessage({ type: ResponseType.SUCCESS, key: request.key, value: cache.value } satisfies Response<typeof request.value>);
 							}
+						}
+						else
+						{
+							port.postMessage({ type: ResponseType.ABSENCE, key: request.key, value: null } satisfies Response<typeof request.value>);
 						}
 						break;
 					}
@@ -174,8 +176,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 
 		for (const [key, value] of Object.entries(_) as [keyof typeof _, typeof _[keyof typeof _]][])
 		{
-			// TODO: deep compare
-			if (state[key] !== value)
+			if (!is_equal(state[key], value))
 			{
 				// @ts-expect-error silent update
 				state[key] = value; if (deps.current.has(key)) changes++;
@@ -200,7 +201,7 @@ export default function useQuery<T, D = T>(fetcher: () => Promise<T>, dependenci
 			{
 				switch (response.type)
 				{
-					case ResponseType.EMPTY:
+					case ResponseType.ABSENCE:
 					{
 						// STEP 4. dedupe
 						if (!ON_GOING.has(key.current))

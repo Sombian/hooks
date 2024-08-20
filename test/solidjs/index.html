@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 
 <html>
+	<script>
+		new WebSocket(`ws://${location.host}`).addEventListener("message", (event) => location.reload());
+	</script>
 	<head>
 		<title>SolidJS</title>
 	</head>
@@ -9,7 +12,3 @@
 		<script src="./index.js"></script>
 	</body>
 </html>
-
-<script>
-	new WebSocket(`ws://${location.host}`).addEventListener("message", (event) => location.reload());
-</script>

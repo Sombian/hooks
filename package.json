@@ -1,25 +1,61 @@
 {
-	"name": "hooks",
-	"scripts":
-	{
-		"test(react)": "bun --hot test/index.ts --target react",
-		"test(solidjs)": "bun --hot test/index.ts --target solidjs"
+	"name": "@sombian/hookms",
+	"main": "out/cjs/index.js",
+	"module": "out/esm/index.js",
+	"scripts": {
+		"serve": "bun --hot ./test/index.ts",
+		"serve:react": "bun --hot test/index.ts --target react",
+		"serve:solidjs": "bun --hot test/index.ts --target solidjs",
+		"build": "npm run build:esm && npm run build:cjs",
+		"build:esm": "tsc --p tsconfig.esm.json && swc ./src -s -C module.type=es6 -d ./out/esm --strip-leading-paths",
+		"build:cjs": "tsc --p tsconfig.cjs.json && swc ./src -s -C module.type=commonjs -d ./out/cjs --strip-leading-paths"
+	},
+	"files": [
+		"out"
+	],
+	"exports": {
+		"react": {
+			"import": {
+				"types": "./out/esm/react/index.d.ts",
+				"default": "./out/esm/react/index.js"
+			},
+			"require": {
+				"types": "./out/cjs/react/index.d.ts",
+				"default": "./out/cjs/react/index.js"
+			}
+		},
+		"solidjs": {
+			"import": {
+				"types": "./out/esm/solidjs/index.d.ts",
+				"default": "./out/esm/solidjs/index.js"
+			},
+			"require": {
+				"types": "./out/cjs/solidjs/index.d.ts",
+				"default": "./out/cjs/solidjs/index.js"
+			}
+		}
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Sombian/markdown.git"
 	},
 	"dependencies":
 	{
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1"
 	},
-	"devDependencies":
-	{
+	"devDependencies": {
+		"@swc/cli": "^0.4.0",
+		"@swc/core": "^1.7.14",
 		"@types/bun": "^1.1.6",
+		"@types/node": "^22.4.1",
 		"@types/react": "^18.3.3",
 		"@types/react-dom": "^18.3.0",
 		"eslint": "^9.9.0",
 		"typescript": "^5.5.4",
-		"typescript-eslint": "^8.0.1"
+		"typescript-eslint": "^8.2.0"
 	},
 	"type": "module",
 	"author": "Sombian",
-	"keywords": ["hooks"]
+	"version": "1.0.0"
 }

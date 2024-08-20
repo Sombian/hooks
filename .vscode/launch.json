@@ -2,10 +2,10 @@
 	"configurations":
 	[
 		{
-			"name": "test(react)", "type": "node-terminal", "cwd":"${workspaceFolder}", "request": "launch", "command": "bun test(react)",
+			"name": "serve:react", "type": "node-terminal", "cwd":"${workspaceFolder}", "request": "launch", "command": "bun serve:react",
 		},
 		{
-			"name": "test(solidjs)", "type": "node-terminal", "cwd":"${workspaceFolder}", "request": "launch", "command": "bun test(solidjs)",
+			"name": "serve:solidjs", "type": "node-terminal", "cwd":"${workspaceFolder}", "request": "launch", "command": "bun serve:solidjs",
 		},
 	],
 }

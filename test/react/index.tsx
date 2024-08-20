@@ -1,8 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import useQuery from "@/react/useQuery";
-import useSyncState from "@/react/useSyncState";
+import useQuery from "@/react/private/useQuery";
+import useSyncState from "@/react/private/useSyncState";
 
 function App()
 {

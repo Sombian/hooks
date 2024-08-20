@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import is_equal from "@/utils/is_equal";
+
+import { useCallback, useEffect, useState, useRef } from "react";
 
 const [STORE, TARGET, CHANNEL] = [new Map<string, unknown>(), new EventTarget(), new BroadcastChannel("useSyncState")];
 
 const enum MessageType
 {
 	SYNC,
-	UPDATE,
+	ASSIGN,
 }
 
 class Message<T>
@@ -34,14 +36,13 @@ export default function useSyncState<T>(key: string, fallback: T)
 					if (init.current)
 					{
 						// STEP 3. send back data
-						CHANNEL.postMessage(new Message(MessageType.UPDATE, key, data));
+						CHANNEL.postMessage(new Message(MessageType.ASSIGN, key, data));
 					}
 					break;
 				}
-				case MessageType.UPDATE:
+				case MessageType.ASSIGN:
 				{
-					// TODO: deep compare
-					if (data !== msg.value)
+					if (!is_equal(data, msg.value))
 					{
 						// STEP 3. reflect msg data
 						init.current = true; setData(msg.value);
@@ -90,7 +91,7 @@ export default function useSyncState<T>(key: string, fallback: T)
 
 		if (signal !== data)
 		{
-			const msg = new Message(MessageType.UPDATE, key, signal);
+			const msg = new Message(MessageType.ASSIGN, key, signal);
 
 			// STEP 3. (waterfall) components -> page -> tabs
 			init.current = true; setData(signal); STORE.set(key, signal); TARGET.dispatchEvent(new CustomEvent("msg", { detail: msg })); CHANNEL.postMessage(msg);
